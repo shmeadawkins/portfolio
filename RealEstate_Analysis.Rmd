@@ -1,0 +1,518 @@
+---
+title: "Real Estate Analysis"
+author: "Harrison Ma"
+date: "3/1/2023"
+output: pdf_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo=TRUE, tidy.opts = list(width.cutoff = 70), tidy = TRUE)
+
+library("zoo")
+library("tidyverse")
+library("semTools")
+
+```
+
+
+* State level dataset used from https://www.realtor.com/research/data/: RDC_Inventory_Core_Metrics_State_History.csv
+
+# Overall Goal
+Examine variables, including potential subgroups based on location or date, and relationships between variables.
+
+## Data Preparation
+Read in and prepare the data, ensuring the data is in the right shape and correct data type before you begin. 
+
+```{r}
+# import Realtor.com State data
+RDC.State <- read.csv("RDC_Inventory_Core_Metrics_State_History.csv")
+
+# examine data
+summary(RDC.State)
+str(RDC.State)
+
+# re code variable data types, remove NAs
+RDC.State.Cleaned <- RDC.State %>%
+  na.omit(RDC.State) %>%
+  mutate(pending_ratio_mm = as.numeric(pending_ratio_mm)) %>%
+  mutate(pending_ratio_yy = as.numeric(pending_ratio_yy)) %>%
+  mutate(month_date_yyyymm = as.Date(paste0(month_date_yyyymm, '01'), format= '%Y%m%d'))
+
+# re-examine data for changes
+str(RDC.State.Cleaned)
+```
+
+
+## Examine variables
+Evaluate central tendency and spread for continuous variables, and frequency and relative frequency for categorical variables.
+
+Variables that relate to price and listing count are showing a higher mean than median, suggesting that the distributions are right-skewed. This means that we should use the median for these variables throughout our analysis. Variables relating month to previous month and month to previous year changes have symmetrical distributions, meaning that is appropriate to use the mean. Listing prices are skewed because of low numbers of high-priced houses, meaning most house listing prices are concentrated on the lower end. Something else I observed is that median days on market compared to the previous month is centered below zero. This may suggest that houses continue to stay on the market for short periods of time as time goes on.
+
+```{r}
+# median_listing_price
+mean(RDC.State.Cleaned$median_listing_price)
+# 335709.5
+median(RDC.State.Cleaned$median_listing_price)
+# 299900
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = median_listing_price)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$median_listing_price)
+kurtosis(RDC.State.Cleaned$median_listing_price)
+# The distribution is leptokurtic and right-skewed.
+var(RDC.State.Cleaned$median_listing_price)
+# 17404378815
+sd(RDC.State.Cleaned$median_listing_price)
+# 131925.7
+range(RDC.State.Cleaned$median_listing_price)
+# 145450 879500
+IQR(RDC.State.Cleaned$median_listing_price)
+# 158428
+
+
+
+# new_listing_count
+mean(RDC.State.Cleaned$new_listing_count)
+# 8892.358
+median(RDC.State.Cleaned$new_listing_count)
+# 5564
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = new_listing_count)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$new_listing_count)
+kurtosis(RDC.State.Cleaned$new_listing_count)
+# The distribution is right-skewed with a z-value of 56.305.
+
+var(RDC.State.Cleaned$new_listing_count)
+# 98294305
+sd(RDC.State.Cleaned$new_listing_count)
+# 9914.348
+range(RDC.State.Cleaned$new_listing_count)
+# 280 52876
+IQR(RDC.State.Cleaned$new_listing_count)
+# 9018
+
+
+
+# active_listing_count
+mean(RDC.State.Cleaned$active_listing_count)
+# 19032.82
+median(RDC.State.Cleaned$active_listing_count)
+# 11189.5
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = active_listing_count)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$active_listing_count)
+kurtosis(RDC.State.Cleaned$active_listing_count)
+# The distribution is right-skewed with a z-value of 65.12663392  
+
+var(RDC.State.Cleaned$active_listing_count)
+# 536829827
+sd(RDC.State.Cleaned$active_listing_count)
+# 23169.59
+range(RDC.State.Cleaned$active_listing_count)
+# 718 163956
+IQR(RDC.State.Cleaned$active_listing_count)
+# 17574.25
+
+
+
+# total_listing_count_mm
+mean(RDC.State.Cleaned$total_listing_count_mm)
+# 0.002979329
+median(RDC.State.Cleaned$total_listing_count_mm)
+# -2e-04
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = total_listing_count_mm)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$total_listing_count_mm)
+kurtosis(RDC.State.Cleaned$total_listing_count_mm)
+# The distribution is leptokurtic with a z-value of 83.7834.
+var(RDC.State.Cleaned$total_listing_count_mm)
+# 0.006501548
+sd(RDC.State.Cleaned$total_listing_count_mm)
+# 0.08063218
+range(RDC.State.Cleaned$total_listing_count_mm)
+# -0.3557  0.7868
+IQR(RDC.State.Cleaned$total_listing_count_mm)
+# 0.08505
+
+
+
+# median_square_feet
+mean(RDC.State.Cleaned$median_square_feet)
+# 1926.552
+median(RDC.State.Cleaned$median_square_feet)
+# 1941
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = median_square_feet)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$median_square_feet)
+kurtosis(RDC.State.Cleaned$median_square_feet)
+# The distribution is leptokurtic, but not skewed.
+var(RDC.State.Cleaned$median_square_feet)
+# 58789.32
+sd(RDC.State.Cleaned$median_square_feet)
+# 242.4651
+range(RDC.State.Cleaned$median_square_feet)
+# 990 2808
+IQR(RDC.State.Cleaned$median_square_feet)
+# 258
+
+
+# median_days_on_market
+mean(RDC.State.Cleaned$median_days_on_market)
+# 63.30511
+median(RDC.State.Cleaned$median_days_on_market)
+# 60
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = median_days_on_market)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$median_days_on_market)
+kurtosis(RDC.State.Cleaned$median_days_on_market)
+
+var(RDC.State.Cleaned$median_days_on_market)
+# 571.6432
+sd(RDC.State.Cleaned$median_days_on_market)
+# 23.90906
+range(RDC.State.Cleaned$median_days_on_market)
+# 14 191
+IQR(RDC.State.Cleaned$median_days_on_market)
+# 32
+
+
+
+# median_days_on_market_yy
+mean(RDC.State.Cleaned$median_days_on_market_yy)
+# -0.08939443
+median(RDC.State.Cleaned$median_days_on_market_yy)
+# -0.087
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = median_days_on_market_yy)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$median_days_on_market_yy)
+kurtosis(RDC.State.Cleaned$median_days_on_market_yy)
+
+var(RDC.State.Cleaned$median_days_on_market_yy)
+# 0.0246584
+sd(RDC.State.Cleaned$median_days_on_market_yy)
+# 0.1570299
+range(RDC.State.Cleaned$median_days_on_market_yy)
+# -0.7064  0.6923
+IQR(RDC.State.Cleaned$median_days_on_market_yy)
+# 0.1518
+
+
+
+# median_days_on_market_mm
+mean(RDC.State.Cleaned$median_days_on_market_mm)
+# 0.004394047
+median(RDC.State.Cleaned$median_days_on_market_mm)
+# 0.0208
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = median_days_on_market_mm)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$median_days_on_market_mm)
+kurtosis(RDC.State.Cleaned$median_days_on_market_mm)
+
+var(RDC.State.Cleaned$median_days_on_market_mm)
+# 0.01761392
+sd(RDC.State.Cleaned$median_days_on_market_mm)
+# 0.1327174
+range(RDC.State.Cleaned$median_days_on_market_mm)
+# -0.7097  0.8519
+IQR(RDC.State.Cleaned$median_days_on_market_mm)
+# 0.159225
+
+
+# price_reduced_count
+mean(RDC.State.Cleaned$price_reduced_count)
+# 5323.327
+median(RDC.State.Cleaned$price_reduced_count)
+# 2748
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = price_reduced_count)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$price_reduced_count)
+kurtosis(RDC.State.Cleaned$price_reduced_count)
+# The distribution is right-skewed with a z-value of 78.05508921.
+
+var(RDC.State.Cleaned$price_reduced_count)
+# 59079858
+sd(RDC.State.Cleaned$price_reduced_count)
+# 7686.342
+range(RDC.State.Cleaned$price_reduced_count)
+# 80 59600
+IQR(RDC.State.Cleaned$price_reduced_count)
+# 5269
+
+
+# price_reduced_count_mm
+mean(RDC.State.Cleaned$price_reduced_count_mm)
+# 0.02318013
+median(RDC.State.Cleaned$price_reduced_count_mm)
+# 0.01285
+
+RDC.State.Cleaned %>%
+  ggplot(aes(x = price_reduced_count_mm)) +
+  geom_histogram()
+
+skew(RDC.State.Cleaned$price_reduced_count_mm)
+kurtosis(RDC.State.Cleaned$price_reduced_count_mm)
+# The distribution is symmetrical and leptokurtic.
+
+var(RDC.State.Cleaned$price_reduced_count_mm)
+# 0.05873634
+sd(RDC.State.Cleaned$price_reduced_count_mm)
+# 0.2423558
+range(RDC.State.Cleaned$price_reduced_count_mm)
+# -0.7548  2.8261
+IQR(RDC.State.Cleaned$price_reduced_count_mm)
+# 0.254425
+
+```
+
+
+
+## Group Variables
+Group categorical variables further to see different patterns based on location and/or date
+
+Median listing prices increase every year. Within each year, prices tend to be higher in the late-spring to summer months. Hawaii has the most expensive houses yet has one of the lowest square footage. Utah has by far the biggest houses. Square feet may not have as great of an effect on listing price as I previously thought. The state with the highest active listing count is Florida.
+
+```{r}
+# evaluating the mean of the median price by state
+median_price_groupby_state <- aggregate(RDC.State.Cleaned$median_listing_price, list(RDC.State.Cleaned$state), median)
+colnames(median_price_groupby_state) <- c("state", "median_price")
+
+# looking at the top 6 states median price
+top_median_price_groupby_state <- median_price_groupby_state[order(-median_price_groupby_state$median_price),]
+head(top_median_price_groupby_state)
+
+# looking at the bottom 6 states by median price
+bottom_median_price_groupby_state <- median_price_groupby_state[order(median_price_groupby_state$median_price),]
+head(bottom_median_price_groupby_state)
+
+
+# evaluating median of active listing count by state
+median_active_listing_groupby_state <- aggregate(RDC.State.Cleaned$active_listing_count, list(RDC.State.Cleaned$state), median)
+colnames(median_active_listing_groupby_state) <- c("state", "median_active_listing_count")
+
+# top 6 states by median active listing count
+top_median_active_listing_groupby_state <- median_active_listing_groupby_state[order(-median_active_listing_groupby_state$median_active_listing_count),]
+head(top_median_active_listing_groupby_state)
+
+# bottom 6 states by median active listing count
+bottom_median_active_listing_groupby_state <- median_active_listing_groupby_state[order(median_active_listing_groupby_state$median_active_listing_count),]
+head(bottom_median_active_listing_groupby_state)
+
+
+# evaluating mean square feet by state
+median_sqft_bystate <- aggregate(RDC.State.Cleaned$median_square_feet, list(RDC.State.Cleaned$state), median)
+colnames(median_sqft_bystate) <- c("state", "median_sqft")
+
+# top 6 states by mean square feet
+top_median_sqft_bystate <- median_sqft_bystate[order(-median_sqft_bystate$median_sqft),]
+head(top_median_sqft_bystate)
+
+# bottom 6 states by mean square feet
+bottom_median_sqft_bystate <- median_sqft_bystate[order(median_sqft_bystate$median_sqft),]
+head(bottom_median_sqft_bystate)
+
+# evaluating median price by date
+median_price_bydate <- aggregate(RDC.State.Cleaned$median_listing_price, list(RDC.State.Cleaned$month_date_yyyymm), median)
+colnames(median_price_bydate) <- c("date", "median_price")
+
+# top 6 year-month by date
+top_median_price_bydate <- median_price_bydate[order(-median_price_bydate$median_price),]
+head(top_median_price_bydate)
+
+# bottom 6 year-month by date
+bottom_median_price_bydate <- median_price_bydate[order(median_price_bydate$median_price),]
+head(bottom_median_price_bydate)
+
+
+Yr2022.State <- RDC.State.Cleaned %>%
+  filter(month_date_yyyymm > "2021-01-01")
+
+Hawaii.2021 <- RDC.State.Cleaned %>%
+  filter(state == "hawaii") %>%
+  filter(month_date_yyyymm > "2021-01-01")
+
+Hawaii <- RDC.State.Cleaned %>%
+  filter(state == "hawaii")
+
+Alaska <- RDC.State.Cleaned %>%
+  filter(state == "alaska")
+
+Virginia <- RDC.State.Cleaned %>%
+  filter(state == "virginia")
+```
+
+
+## Data Visualization
+Create graphs depicting relationships between 2 variables
+
+```{r}
+ActiveListCountmm.MedListPrice.Scatter <- RDC.State.Cleaned %>%
+  ggplot(aes(x = active_listing_count_mm, y = median_listing_price)) + geom_point() + stat_smooth(method = "lm") + ggtitle("Active Listing Count MM vs Median Listing Price")
+ActiveListCountmm.MedListPrice.Scatter
+# This scatter plot with a regression line shows the relationship between change in active listing count from the previous month to the median listing price. While there doesn't seem to have a significant relationship looking at the plot, the trend line suggest a positive correlation.
+
+ActiveListCount.MedListPrice.Scatter <- RDC.State.Cleaned %>%
+  ggplot(aes(x = active_listing_count, y = median_listing_price)) + geom_point() + stat_smooth(method = "lm") + ggtitle("Active Listing Count vs Median Listing Price")
+ActiveListCount.MedListPrice.Scatter
+# This scatter plot with a regression line shows the relationship between active listing count and median listing price. This plot shows little to no correlation. The trend line appears to have little to no slope.
+
+ListPrice.SqFt.Scatter <- RDC.State.Cleaned %>%
+  ggplot(aes(x = median_square_feet, y = median_listing_price)) + geom_point() + stat_smooth(method = "lm") + ggtitle("Median Square Feet vs Median Listing Price")
+ListPrice.SqFt.Scatter
+# This scatter plot with a regression line shows the relationship between median listing price and median square feet. There seems to be little to correlation, but the trend line slope shows a slightly negative relationship.
+
+State.SqFt.Bar <- top_median_sqft_bystate %>%
+  ggplot(aes(reorder(state, -median_sqft), median_sqft)) + geom_bar(stat = "identity", position = "dodge")
+State.SqFt.Bar + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + ggtitle("Median Square Feet by State") + xlab("State") + ylab("Median Square Feet")
+# This bar chart shows median square feet by state. Utah has the highest square feet.
+
+State.MedPrice.Bar <- top_median_price_groupby_state %>%
+  ggplot(aes(reorder(state, -median_price), median_price)) + geom_bar(stat = "identity", position = "dodge")
+State.MedPrice.Bar + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + ggtitle("Median Listing Price by State") + xlab("State") + ylab("Median Listing Price")
+# This bar chart shows Median Listing Price by State in Descending order by listing price. Hawaii and DC have the highest listing prices.
+
+Date.Price.Bar <- top_median_price_bydate %>%
+  ggplot(aes(x = date, y = median_price)) + geom_bar(stat = "identity", position = "dodge")
+Date.Price.Bar + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + ggtitle("Median Listing Price by Year") + xlab("Date") + ylab("Median Price")
+# This bar chart shows the relationship between Date-time by Year-Month and Median Price.
+
+Hawaii.SqFt.Scatter <- Hawaii %>%
+  ggplot(aes(x = median_square_feet, y = median_listing_price)) + geom_point() + stat_smooth(method = "lm") + ggtitle("Hawaii Listing Price vs Square Feet")
+Hawaii.SqFt.Scatter
+# This scatter plot shows the relationship between listing price and square feet in listing in Hawaii.
+
+Alaska.SqFt.Scatter <- Alaska %>%
+  ggplot(aes(x = median_square_feet, y = median_listing_price)) + geom_point() + stat_smooth(method = "lm") + ggtitle("Alaska Listing Price vs Square Feet")
+Alaska.SqFt.Scatter
+# This scatter plot shows the relationship between listing price and square feet in listing in Alaska.
+
+Virginia.SqFt.Scatter <- Virginia %>%
+  ggplot(aes(x = median_square_feet, y = median_listing_price)) + geom_point() + stat_smooth(method = "lm") + ggtitle("Virginia Listing Price vs Square Feet")
+Virginia.SqFt.Scatter 
+# This scatter plot shows the relationship between listing price and square feet in listing in Virginia.
+```
+
+
+## Make predictions 
+Make predictions about what you would find when you compare variables based on the graphs and statistics.
+
+Based on what I have seen so far, I predict that listing price and square feet are positively correlated within each state. But when I break it down state by state, some have negative correlations and some have positive. Listing prices are not equal across states. I also predict that active listing count month to previous month is positively correlated with price, but active listing count total is negatively correlated.
+
+
+
+## Test relationships 
+Test relationships between price other variables.
+
+
+One-Way ANOVA - Median Listing Price and State
+```{r}
+# Step 1:
+# H0: All population means of median listing price are equal among states.
+# HA: Not all population means of median listing price are equal among states.
+
+# Steps 2 and 3:
+oneway.test(median_listing_price ~ state, RDC.State.Cleaned, var.equal = TRUE)
+
+# Steps 4 and 5:
+# The F-test statistic is 380.9 with an associated p-value of < 2.2e-16, which is less than our alpha of .05. This p-value suggests that reject the null hypothesis in support of the alternative and conclude that median listing prices are not equal across states.
+
+pairwise.t.test(RDC.State.Cleaned$median_listing_price, RDC.State.Cleaned$state, p.adj = "bonf")
+# A vast majority of the state comparisons at a p-value < 2e-16, meaning that there are differences in median listing price. Although Alaska-Delaware, DC-California, Florida-Arizona, and others suggest that there are no differences in median listing price.
+```
+
+One-Way ANOVA - Median Listing Price and Year-Month
+```{r}
+# Step 1:
+# H0: All population means of median listing price are equal
+# HA: Not all population means of median listing price are equal
+
+# Steps 2 and 3:
+oneway.test(median_listing_price ~ month_date_yyyymm, RDC.State.Cleaned, var.equal = TRUE)
+
+# Steps 4 and 5:
+# The F-test statistic is 5.3877 with an associated p-value of < 2.2e-16, which is less than our alpha of .05. This p-value suggests that reject the null hypothesis in support of the alternative.
+
+# Step 6:
+pairwise.t.test(RDC.State.Cleaned$median_listing_price, RDC.State.Cleaned$month_date_yyyymm, p.adj = "bonf")
+# Evaluating the results of the Bonferroni test shows only 1s, which means there is no evidence to reject the null hypothesis. Therefore we should retain the null hypothesis.
+```
+
+Regression Test - Median Listing Price and Active Listing Count
+```{r}
+# Define null and alternative hypothesis
+# H0: The slope of the line is equal to zero.
+# HA: The slope of the line is not equal to zero.
+
+# Fit linear model
+MedListPrice.ActiveListCt.lmtest <- lm(median_listing_price ~ active_listing_count, data = RDC.State.Cleaned)
+summary(MedListPrice.ActiveListCt.lmtest)
+
+```
+Looking at Goodness of Fit, the R-squared at 6.495e-05 is very small and the adjusted R-squared is -0.0002547 which is negative. This suggests the regression line does not explain the data well. The F-test statistic is  0.2032 which means the model leaves more unexplained that it explains. The p-value is 0.652 which is not significant at the .05 level. This suggests that we should retain the null hypothesis that the slope of the line is equal to 0.
+
+
+Regression Test - Median Listing Price and Median Days On Market
+```{r}
+# Define null and alternative hypothesis
+# H0: The slope of the line is equal to zero.
+# HA: The slope of the line is not equal to zero.
+
+# Fit linear model
+MedListPrice.DaysOnMarket.lmtest <- lm(median_listing_price ~ median_days_on_market, data = RDC.State.Cleaned)
+summary(MedListPrice.DaysOnMarket.lmtest)
+
+
+# Correlation test
+cor.test(RDC.State.Cleaned$median_listing_price, RDC.State.Cleaned$median_days_on_market)
+# A correlation of -0.3725 shows that there is a weak negative correlation. There is a relationship between the two variables.
+```
+Evaluating Goodness of Fit, the R-squared at 0.1388 is very close to the adjusted R-squared of 0.1385. This means that days on market explains 13.85% of the variance in listing price. We see an F-test Statistic of 504 with an associated p-value of < 2.2e-16 in our output, which means our model explains more than it leaves unexplained. Our p-value suggests that our model is significant. This means that our predictor variable of days on market does influence listing price. We can reject the null and support the alternative hypothesis that the slope of the line is not equal top zero. 
+
+
+Regression Test - Median Listing Price and Median Square Feet
+```{r}
+# Define null and alternative hypothesis
+# H0: The slope of the line is equal to zero.
+# HA: The slope of the line is not equal to zero.
+
+# Fit linear model
+MedListPrice.MedSqFt.lmtest <- lm(median_listing_price ~ median_square_feet, data = RDC.State.Cleaned)
+summary(MedListPrice.MedSqFt.lmtest)
+
+```
+Evaluating Goodness of Fit, the R-squared at 0.02736 is very close to the adjusted R-squared of 0.02705. This means that median square feet only explains 2.7% of the variance in median listing price. We see an F-test Statistic of 88 with an associated p-value of < 2.2e-16 in our output.  Our p-value suggests that our model is significant. This means that our predictor variable of median square, while explaining a low amount of variance, does influence listing price. We can reject the null and support the alternative hypothesis that the slope of the line is not equal top zero.
+
+
+
+## Conclusion
+Describe the variables you found to be the strongest predictors of price. (limitations, biases, confounding variables)
+
+After running the One-Way ANOVA test, I conclude the state variable is one the strongest predictors of price. Evaluating the date variable through the One-Way ANOVA test, I would have to conclude that data isn't a strong predictor in price. But, the bar chart showing listing price over time showed a steady increase. This problem may be due to the date variable not being calculated correctly through the Bonferroni test. Now looking at days on market, I can conclude that it is a strong predictor of price. The correlation was negative and the regression test model showed significance. Additionally, square feet is a predictor of price, though with a negative correlation, which goes against my previous prediction. I think there are other factors that affect price that may not be measured in this data set. For example, I think local economies and metropolitan areas may also affect listing price. Metropolitan areas can also stretch over multiple states, making state a less reliable predicting variable. I think it may prove useful to measure more variables that could potentially affect price.
+
+
+
